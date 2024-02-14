@@ -1,6 +1,9 @@
-model/*.darknet
-model/*.onnx
 .*
+**/*.pyc
+darknet/
+detections/
 Dockerfile*
 Makefile
-**/*.pyc
+model/*.darknet
+model/*.onnx
+render/

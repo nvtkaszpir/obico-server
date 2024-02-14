@@ -1,6 +1,5 @@
 .*
 **/*.pyc
-darknet/
 detections/
 Dockerfile*
 Makefile

@@ -37,7 +37,8 @@ RUN echo 'Downloading the latest failure detection AI model in ONNX format...' \
 
 ENV PYTHONDONTWRITEBYTECODE=1
 # check if we can load app, if any python import fails then it will fail image build
-RUN gunicorn --bind 0.0.0.0:3333 --workers 1 wsgi --check-config --preload
+ENV DARKNET_PATH=/darknet
+RUN gunicorn --bind 0.0.0.0:3333 --workers 1 wsgi --check-config --preload -e DARKNET_PATH=/darknet
 
 ARG GIT_SOURCE
 ARG GIT_COMMIT

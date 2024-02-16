@@ -19,6 +19,7 @@ TIMEOUT_READ = float(environ.get("TIMEOUT_READ", "5"))
 # The threshold for a box to be considered a positive detection
 THRESH = float(environ.get("THRESH", "0.08"))
 SESSION_TTL_SECONDS = float(environ.get("SESSION_TTL_SECONDS", 60 * 2))
+FLOAT_PRECISION = int(environ.get("FLOAT_PRECISION", 3))
 app = flask.Flask(__name__)
 
 # Sentry
@@ -37,6 +38,7 @@ status = dict()
 app.config["DEBUG"] = environ.get("DEBUG") == "True"
 
 app.logger.info(f"DEBUG={app.config['DEBUG']}")
+app.logger.info(f"FLOAT_PRECISION={FLOAT_PRECISION}")
 app.logger.info(f"SESSION_TTL_SECONDS={SESSION_TTL_SECONDS}")
 app.logger.info(f"THRESH={THRESH}")
 app.logger.info(f"TIMEOUT_CONNECT={TIMEOUT_CONNECT}")
@@ -47,6 +49,25 @@ model_dir = path.join(path.dirname(path.realpath(__file__)), "model")
 net_main = load_net(
     path.join(model_dir, "model.cfg"), path.join(model_dir, "model.meta")
 )
+
+
+def set_precision(detections, precision=4, box_precision=0):
+    """set float precision and trim detection boxes dimensions to integers"""
+    new_detections = []
+    for detection in detections:
+        text = detection[0]
+        confidence = round(detection[1], precision)
+        box = detection[2]
+        coords = (
+            round(box[0], box_precision),
+            round(box[1], box_precision),
+            round(box[2], box_precision),
+            round(box[3], box_precision),
+        )
+        new_detection = (text, confidence, coords)
+        new_detections.append(new_detection)
+
+    return new_detections
 
 
 # process detection of the image, pass 'img' as param
@@ -64,6 +85,8 @@ def get_p():
             img_array = np.array(bytearray(resp.content), dtype=np.uint8)
             img = cv2.imdecode(img_array, -1)
             detections = detect(net_main, img, thresh=THRESH)
+            print(detections)
+            detections = set_precision(detections, FLOAT_PRECISION)
             return jsonify({"detections": detections})
         except Exception as err:
             sentry_sdk.capture_exception()

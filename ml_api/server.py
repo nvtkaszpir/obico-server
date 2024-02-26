@@ -45,11 +45,11 @@ app.logger.info(f"THRESH={THRESH}")
 app.logger.info(f"TIMEOUT_CONNECT={TIMEOUT_CONNECT}")
 app.logger.info(f"TIMEOUT_READ={TIMEOUT_READ}")
 
-STATSD_HOST = environ.get("STATSD_HOST")
-STATSD_PORT = environ.get("STATSD_PORT")
-STATSD_PREFIX = environ.get("STATSD_PREFIX")
+STATSD_HOST = environ.get("STATSD_HOST", "127.0.0.1")
+STATSD_PORT = environ.get("STATSD_PORT", "8125")
+STATSD_PREFIX = environ.get("STATSD_PREFIX", 'obico.ml_api')
 STATSD_MAXUDPSIZE = environ.get("STATSD_MAXUDPSIZE")
-STATSD_IPV6 = environ.get("STATSD_IPV6")
+STATSD_IPV6 = environ.get("STATSD_IPV6", "0")
 
 app.logger.info(f"STATSD_HOST={STATSD_HOST}")
 app.logger.info(f"STATSD_PORT={STATSD_PORT}")
@@ -98,8 +98,8 @@ def send_statsd(detections):
         if len(detections):
             avg_confidence = sum_confidence / len(detections)
         
-        statsd.gauge('max', max_confidence)
-        statsd.gauge('avg', avg_confidence)
+        statsd.gauge('confidence.max', max_confidence)
+        statsd.gauge('confidence.avg', avg_confidence)
         statsd.gauge('detections', len(detections))
     
 # process detection of the image, pass 'img' as param

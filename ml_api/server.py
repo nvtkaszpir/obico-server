@@ -8,6 +8,7 @@ from sentry_sdk.integrations.flask import FlaskIntegration
 import cv2
 import numpy as np
 import requests
+from statsd.defaults.env import statsd
 
 from auth import token_required
 from lib.detection_model import load_net, detect
@@ -42,13 +43,43 @@ app.logger.info(f"THRESH={THRESH}")
 app.logger.info(f"TIMEOUT_CONNECT={TIMEOUT_CONNECT}")
 app.logger.info(f"TIMEOUT_READ={TIMEOUT_READ}")
 
+STATSD_HOST = environ.get("STATSD_HOST")
+STATSD_PORT = environ.get("STATSD_PORT")
+STATSD_PREFIX = environ.get("STATSD_PREFIX")
+STATSD_MAXUDPSIZE = environ.get("STATSD_MAXUDPSIZE")
+STATSD_IPV6 = environ.get("STATSD_IPV6")
+
+app.logger.info(f"STATSD_HOST={STATSD_HOST}")
+app.logger.info(f"STATSD_PORT={STATSD_PORT}")
+app.logger.info(f"STATSD_PREFIX={STATSD_PREFIX}")
+app.logger.info(f"STATSD_MAXUDPSIZE={STATSD_MAXUDPSIZE}")
+app.logger.info(f"STATSD_IPV6={STATSD_IPV6}")
+
 # load ai/ml models
 model_dir = path.join(path.dirname(path.realpath(__file__)), "model")
 net_main = load_net(
     path.join(model_dir, "model.cfg"), path.join(model_dir, "model.meta")
 )
 
-
+def send_statsd(detections):
+    """send statsd metric for each detection"""
+    max_confidence = 0
+    sum_confidence = 0
+    avg_confidence = 0
+    with statsd.pipeline() as pipe:
+        for detection in detections:
+            confidence = detection[1]
+            # coords = detection[2]
+            sum_confidence += confidence
+            if confidence > max_confidence:
+                max_confidence = confidence
+        if len(detections):
+            avg_confidence = sum_confidence / len(detections)
+        
+        statsd.gauge('max', max_confidence)
+        statsd.gauge('avg', avg_confidence)
+        statsd.gauge('detections', len(detections))
+    
 # process detection of the image, pass 'img' as param
 @app.route("/p/", methods=["GET"])
 @token_required
@@ -64,6 +95,7 @@ def get_p():
             img_array = np.array(bytearray(resp.content), dtype=np.uint8)
             img = cv2.imdecode(img_array, -1)
             detections = detect(net_main, img, thresh=THRESH)
+            send_statsd(detections)
             return jsonify({"detections": detections})
         except Exception as err:
             sentry_sdk.capture_exception()

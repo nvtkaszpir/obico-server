@@ -7,3 +7,4 @@ onnxruntime-gpu
 opencv-python-headless
 requests==2.31.0
 sentry_sdk[flask]==1.40.3
+statsd==4.0.1

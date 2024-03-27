@@ -83,7 +83,7 @@ def set_precision(detections, precision=4, box_precision=0):
     return new_detections
 
 
-def send_statsd(detections):
+def send_statsd(detections, exception=0):
     """send statsd metric for each detection"""
     max_confidence = 0
     sum_confidence = 0
@@ -98,9 +98,10 @@ def send_statsd(detections):
         if len(detections):
             avg_confidence = sum_confidence / len(detections)
         
-        statsd.gauge('confidence.max', max_confidence)
-        statsd.gauge('confidence.avg', avg_confidence)
-        statsd.gauge('detections', len(detections))
+    statsd.gauge('confidence.max', max_confidence)
+    statsd.gauge('confidence.avg', avg_confidence)
+    statsd.gauge('detections', len(detections))
+    statsd.gauge('exception', exception)
     
 # process detection of the image, pass 'img' as param
 @app.route("/p/", methods=["GET"])
@@ -118,9 +119,10 @@ def get_p():
             img = cv2.imdecode(img_array, -1)
             detections = detect(net_main, img, thresh=THRESH)
             detections = set_precision(detections, FLOAT_PRECISION)
-            send_statsd(detections)
+            send_statsd(detections, 0)
             return jsonify({"detections": detections})
         except Exception as err:
+            send_statsd([], 1)
             sentry_sdk.capture_exception()
             app.logger.error(f"Failed to get image {request.args} - {err}")
             abort(

@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 import requests
 from statsd.defaults.env import statsd
+import json
 
 from auth import token_required
 from lib.detection_model import load_net, detect
@@ -63,6 +64,53 @@ net_main = load_net(
     path.join(model_dir, "model.cfg"), path.join(model_dir, "model.meta")
 )
 
+def is_in_dead_zone(d, ignore=[]):
+    """return true if detected box is in dead zone
+
+    this is required to avoid false positives dues to extra elements on the images
+    such as timestamps
+    
+    each entry in ignore list is a list of:
+    - xc - x position of the center of the rectangle
+    - yc - y position of the center of the rectangle
+    - w - width of the rectangle
+    - h - height of the rectangle
+    
+    this is the same way as ML model returns detections (later named 'detections' format)
+    
+    Imagine you have source image 800x600, then we want to exclude left half of
+    the image. In normal coords this is (x=0,y=0 top left image corner)
+    x=0, y=0, w=400, h=300
+    but in the 'detections' format it needs to be encoded as
+    xc=200, y=150, w=400, h=300
+
+    Args:
+        detection (list): list of detections done by the model
+        ignore (list): list of the ignored areas that should be removed to avoid
+            false positives
+    """
+    # quick exit if empty ignore list
+    if len(ignore) == 0:
+        return False
+
+    (xc, yc, w, h) = map(int, d)
+    (x1, y1), (x2, y2) = (xc - w // 2, yc - h // 2), (xc + w // 2, yc + h // 2)
+
+    for dead in ignore:
+        (deadxc, deadyc, deadw, deadh) = map(int, dead)
+        (deadx1, deady1), (deadx2, deady2) = (
+            deadxc - deadw // 2,
+            deadyc - deadh // 2,
+        ), (deadxc + deadw // 2, deadyc + deadh // 2)
+
+        # just check if the center od the detected box is in the dead zone
+        if (deadx1 < xc) and (deady1 < yc):
+            # If bottom-right innerbox corner is inside the bounding box
+            if (xc < deadx2) and (yc < deady2):
+                # print('whole box is inside dead zone')
+                return True
+
+    return False
 
 def set_precision(detections, precision=4, box_precision=0):
     """set float precision and trim detection boxes dimensions to integers"""
@@ -83,7 +131,7 @@ def set_precision(detections, precision=4, box_precision=0):
     return new_detections
 
 
-def send_statsd(detections, exception=0):
+def send_statsd(all_detections, detections, exception=0):
     """send statsd metric for each detection"""
     max_confidence = 0
     sum_confidence = 0
@@ -100,6 +148,7 @@ def send_statsd(detections, exception=0):
         
     statsd.gauge('confidence.max', max_confidence)
     statsd.gauge('confidence.avg', avg_confidence)
+    statsd.gauge('all_detections', len(all_detections))
     statsd.gauge('detections', len(detections))
     statsd.gauge('exception', exception)
     
@@ -107,6 +156,30 @@ def send_statsd(detections, exception=0):
 @app.route("/p/", methods=["GET"])
 @token_required
 def get_p():
+    if "ignore" in request.args:
+        try:
+            ignore = json.loads(request.args["ignore"])
+            app.logger.debug(json.dumps(ignore))
+            if not all(isinstance(elem, list) for elem in ignore):
+                app.logger.warn(f"Failed to parse ignore param as list of lists, assuming empty list.")
+                ignore = []
+        except Exception as err:
+            send_statsd([], 1)
+            sentry_sdk.capture_exception()
+            app.logger.error(f"Failed to process ignored regions {request.args} - {err}")
+            abort(
+                make_response(
+                    jsonify(
+                        detections=[],
+                        message=f"Failed to process ignored regions {request.args} - {err}",
+                    ),
+                    503,
+                )
+            )
+    else:
+        app.logger.warn(f"Missing ignore regions, assuming empty list.")
+        ignore = []
+
     if "img" in request.args:
         try:
             resp = requests.get(
@@ -117,12 +190,19 @@ def get_p():
             resp.raise_for_status()
             img_array = np.array(bytearray(resp.content), dtype=np.uint8)
             img = cv2.imdecode(img_array, -1)
-            detections = detect(net_main, img, thresh=THRESH)
+            all_detections = detect(net_main, img, thresh=THRESH)
+            
+            # filter out detections that are in ignored zones
+            detections  = []
+            for d in all_detections:
+                if not is_in_dead_zone(d[2], ignore):
+                    detections.append(d)
+            
             detections = set_precision(detections, FLOAT_PRECISION)
-            send_statsd(detections, 0)
+            send_statsd(all_detections, detections,  0)
             return jsonify({"detections": detections})
         except Exception as err:
-            send_statsd([], 1)
+            send_statsd([], [], 1)
             sentry_sdk.capture_exception()
             app.logger.error(f"Failed to get image {request.args} - {err}")
             abort(

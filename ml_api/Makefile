@@ -66,5 +66,8 @@ quay: ## build ml api images and push to quay.io
 bake: ## run image builds with docker buildx, see docker-bake.hcl
 	GIT_COMMIT=${GIT_COMMIT} GIT_SOURCE=${GIT_SOURCE} docker buildx bake
 
+serve_ml: ## serve ml api
+	gunicorn --disable-redirect-access-to-syslog --error-logfile - --access-logfile - --workers 1 --threads 8 --timeout 60 --bind 0.0.0.0:3333 --reload wsgi
+
 .DEFAULT_GOAL := help
 .PHONY: help lint-dockerfile ml_base_any ml_base_amd64 ml_base_arm64 ml_any ml_amd64 ml_arm64 ml list_images clean all bake

@@ -13,13 +13,13 @@ Each entry in the list is a list of the region to exclude
 `ignore` param in  URL should be urlencoded json list, for example
 
 ```json
-[[400, 600, 800, 1200]]
+[[320, 32, 640, 64],[210, 600, 420, 1200],[1500, 600, 200, 1200],[1500, 600, 198, 1200]]
 ```
 
 should be passed as
 
 ```text
-%5B%5B400%2C%20600%2C%20800%2C%201200%5D%5D
+%5B%5B320%2C%2032%2C%20640%2C%2064%5D%2C%5B210%2C%20600%2C%20420%2C%201200%5D%2C%5B1500%2C%20600%2C%20200%2C%201200%5D%2C%5B1500%2C%20600%2C%20198%2C%201200%5D%5D
 ```
 
 You can use [onlinejstools](https://onlinejsontools.com/url-encode-json)

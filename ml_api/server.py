@@ -194,13 +194,17 @@ def get_p():
             
             # filter out detections that are in ignored zones
             detections  = []
+            ignored  = []
             for d in all_detections:
-                if not is_in_dead_zone(d[2], ignore):
+                if is_in_dead_zone(d[2], ignore):
+                    ignored.append(d)
+                else:
                     detections.append(d)
             
             detections = set_precision(detections, FLOAT_PRECISION)
+            ignored = set_precision(ignored, FLOAT_PRECISION)
             send_statsd(all_detections, detections,  0)
-            return jsonify({"detections": detections})
+            return jsonify({"detections": detections, "ignored": ignored})
         except Exception as err:
             send_statsd([], [], 1)
             sentry_sdk.capture_exception()

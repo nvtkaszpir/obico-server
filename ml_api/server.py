@@ -85,9 +85,12 @@ def is_in_dead_zone(d, ignore=[]):
     xc=200, y=150, w=400, h=300
 
     Args:
-        detection (list): list of detections done by the model
+        detection (list): list of detections done by the model, each item in the list
+            ist a list of 4 coords: [centerx, centery, width, height]
         ignore (list): list of the ignored areas that should be removed to avoid
-            false positives
+            false positives, each item in the list
+            ist a list of 4 coords: [centerx, centery, width, height]
+            
     """
     # quick exit if empty ignore list
     if len(ignore) == 0:
@@ -103,7 +106,7 @@ def is_in_dead_zone(d, ignore=[]):
             deadyc - deadh // 2,
         ), (deadxc + deadw // 2, deadyc + deadh // 2)
 
-        # just check if the center od the detected box is in the dead zone
+        # just check if the center of the detected box is in the dead zone
         if (deadx1 < xc) and (deady1 < yc):
             # If bottom-right innerbox corner is inside the bounding box
             if (xc < deadx2) and (yc < deady2):
@@ -113,7 +116,14 @@ def is_in_dead_zone(d, ignore=[]):
     return False
 
 def set_precision(detections, precision=4, box_precision=0):
-    """set float precision and trim detection boxes dimensions to integers"""
+    """Set float precision and trim detection boxes dimensions to integers
+    
+    This helps to:
+    - show normal coords as integers (pixels) instead of floats.
+    - set precision to more easily readable values, so instead of 0.3321541 you
+        get 0.332
+    All above helps when looking at the logs.
+    """
     new_detections = []
     for detection in detections:
         text = detection[0]
@@ -152,10 +162,11 @@ def send_statsd(all_detections, detections, exception=0):
     statsd.gauge('detections', len(detections))
     statsd.gauge('exception', exception)
     
-# process detection of the image, pass 'img' as param
+# process detection of the image, pass 'img'  and 'ignore' as param
 @app.route("/p/", methods=["GET"])
 @token_required
 def get_p():
+    # process ignored regions from the input, it should be json string
     if "ignore" in request.args:
         try:
             ignore = json.loads(request.args["ignore"])
@@ -180,6 +191,7 @@ def get_p():
         app.logger.warn(f"Missing ignore regions, assuming empty list.")
         ignore = []
 
+    # process img as the image source to do inference on
     if "img" in request.args:
         try:
             resp = requests.get(

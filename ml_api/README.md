@@ -103,8 +103,3 @@ result
     ]
 }
 ```
-
-# TODO
-
-- when running detect.py on video do not overwrite detections.json, but make it jsonl?
-    python3 detect.py /smb/bagno/kaszpir/src/node-red/data/prusa/with_gcode/2024-03-27_2/2024-03-27_2.mp4 --save-detections-to detections.json --render-to ./2024-03-27_2_rendered.mp4
